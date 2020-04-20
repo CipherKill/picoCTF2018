@@ -1,0 +1,65 @@
+#!/usr/bin/python3
+from binascii import hexlify,unhexlify
+from pwn import *
+import time
+context.log_level='error'
+
+def lxor(v1,v2):
+	return ''.join(chr(ord(x)^ord(y)) for x,y in zip(v1,v2))
+
+def strep(text,index=0,r=''):
+	return '{}{}{}'.format(text[:index],r,text[index+1:])
+
+target = [
+    '{"username": "gu',
+    'est", "expires":',
+    ' "2030-01-07", "',
+    'is_admin":  "tru',
+    'e"}'+'\x0d'*13 ]
+
+iv='This is an IV456'
+
+block = [
+    iv,
+    '0'*16,
+    '0'*16,
+    '0'*16,
+    '0'*16,
+    'A'*16
+]
+
+for n_block in range(len(block)-2,-1,-1):
+	for i in range(16):
+		print("[!]Finding {}th byte".format(15-i))
+		for j in range(0,256):
+			block[n_block]=strep(block[n_block],15-i,chr(j))
+			#print('[~]Length={}'.format(len(block[n_block])))
+			ci=hexlify((block[n_block]+block[n_block-1]).encode())
+			r=remote('2018shell.picoctf.com',45008)
+			r.recvuntil(b'What is your cookie?\n')
+			r.sendline(ci)
+			data=r.recv()
+			if(data.find(b'invalid padding')==-1):
+				#print('[~]Length={}'.format(len(block[n_block])))
+				for k in range(i+1):
+					if(i==15):
+						break
+					trail=chr(ord(block[n_block][15-k])^(i+1))
+					block[n_block]=strep(block[n_block],15-k,trail)
+				print("[!]Found Match")
+				break
+
+		print("[!]Byte Shifted\n")
+
+	block[n_block]=lxor(block[n_block],target[n_block])
+final=''
+for val in block:
+	print(val)
+	if(len(val)!=16):
+		print("[!]Error")
+		break
+	final=final+val
+print('\n[G]Final NonHex Form: {}'.format(final))
+print('\n[G]Final Encrypted Form: {}'.format(hexlify(final.encode()).decode()))
+
+print("\n[!]End of program.")

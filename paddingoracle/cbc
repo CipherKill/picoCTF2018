@@ -1,0 +1,90 @@
+#!/usr/bin/python3
+from pwn import *
+import time
+from binascii import unhexlify
+context.log_level='error'
+def logging(data):
+	#print(">>>>>>>>>{}".format(data))
+	file=open('log','a')
+	file.write('{}'.format(data))
+
+def seperator(data):
+	#global bci
+	#if(state=='n'):
+	a=[data[i-1]+data[i] for i in range(31,-1,-2)]
+	#elif(state=='r'):
+		#a=[data[i-1]+data[i] for i in range(31,-1,-2)]
+		#a=
+	return a
+
+
+def hexor(val1,val2,val3):
+	result=str(hex(int(val1,16)^int(val2,16)^int(val3,16)))
+	result=result[2:]
+	return result
+
+def check(payload,bits,i,guess,bci):
+	global inter,final
+	#print("Testing: Payload: {}({})".format(payload,len(payload)))
+	s=remote('2018shell2.picoctf.com',6246)
+	s.recvuntil('What is your cookie?\n')
+	s.sendline(payload)
+	data=s.recv()
+	s.close()
+	if(data.find(b'invalid padding')==-1):
+		#print('[!]Found!\nBits: {}\nPre-Cipher: {}\nGuess: {}'.format(bits,bci[int(guess)-1],guess))
+		hexR=hexor(bci[int(guess)-1],bits,guess)
+		if(len(hexR)==1):
+			hexR='0'+hexR
+		print("\x1b[1;32;50m[!]Found: {} : {}\x1b[1;33;50m({})".format(hexR,payload,len(payload)))
+		inter.append(hexR)
+		final.append(hexR)
+		print("Found:")
+		print(". ".join(final[i] for i in range(0,len(final))))
+		logging(hexR)
+		return 1
+	else:
+		print("\x1b[1;31;50mPayload: {}\x1b[1;33;50m({})".format(payload,len(payload)))
+		return 0
+
+
+h='0123456789abcdef'
+cipher='5468697320697320616e2049565468697320697320616e204956343536bade59109764febea2c7750a4dae94dc9d494afe7d2f6f65fb1396791585bc03001275db3d5dc7666a39a5b1159e261a7bce4dd133a77c975cbba1ddb3751bc69f88ebbf9d2ca59cda28230eddb23e16343536bade59109764febea2c7750a4dae94dc9d494afe7d2f6f65fb1396791585bc03001275db3d5dc7666a39a5b1159e261a7bce4dd133a77c975cbba1ddb3751bc69f88ebbf9d2ca59cda28230eddb23e16'
+c=[cipher[i:i+32] for i in range(0,len(cipher),32)]
+print("Cipher(total {})".format(len(c)))
+print("\n".join(ci for ci in c))
+final=[]
+iniload=''
+for i in range(len(c)-1,-1,-1): #starts from 11
+	if(i==0):
+		break
+	inter=[]
+	cipher=c[i]
+	bci=seperator(c[i-1])
+	#print(bci)
+	for j in range(1,17):
+		guess=h[0]+h[j]
+		if(len(inter)!=0):
+			for p in range(len(inter),0,-1):
+				ta=hexor(inter[p-1],guess,bci[p-1])
+				if(len(ta)==1):
+					ta='0'+ta
+				iniload=iniload+ta
+		cfake='0'*(32-(2*j))
+		breaker=0
+		for x in h:
+			for y in h:
+				bits=str(x+y)
+				payload=cfake+bits+iniload+cipher
+				breaker=check(payload,bits,i,guess,bci)
+				if(breaker==1):
+					break
+			if(breaker==1):
+				iniload=''
+				break
+print("Decrypted:")
+for u in range(len(final)-1,-1,-1):
+	print(''.join(unhexlify(final[u])))
+
+
+print('EOP')
